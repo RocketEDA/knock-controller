@@ -1,6 +1,8 @@
 # knock-controller
 Open source knock controller
+
 Phase I:
+
 Primitive knock system. 
 - Measure RPM
 - Measure knock
