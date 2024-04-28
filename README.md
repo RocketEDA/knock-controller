@@ -1,9 +1,7 @@
 # knock-controller
 Open source knock controller
 
-Phase I:
-
-Primitive knock system. 
+Phase I: Primitive knock system. 
 - Measure RPM
 - Measure knock
 - Monitor knock with noise floor filtering via RPM
