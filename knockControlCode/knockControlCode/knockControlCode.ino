@@ -1,78 +1,127 @@
+#include <Wire.h>
+#include <Adafruit_MCP4725.h>
 #include <arduino-timer.h>
-#define TRIG_EDGE HIGH
-#define RPM_PIN PB1
-#define KNOCK_PIN A0
-#define PPR 2.0 //pulse per revolution
-#define RPM_AVG_NUM 30  //
 
-uint32_t prevMicros = 0; //previous micros time
-uint32_t rpm_period = 0; //rpm period
-uint32_t rpm_pers[RPM_AVG_NUM];
-int rpmPtr = 0;
-float rpm = 0;    //current RPM
-uint32_t t_micros = 0;  //buffer
+#define KNOCK_PIN PA0        //analog channel for measuring knock amount
+#define KNOCK_TRIG_PIN PB0   //edge trigger for knock detection
+#define RETARD_PIN PA7
+#define RETARD_PIN_HOLD 1000000 //how long to hold retard pin HIGH for after knock is detected
 
-Timer<1, micros> u_timer;
+#define KNOCK_AVG_NUM 20
+
+#define KNOCK_DAC_SAMPLE_INTERVAL 40000  //long enough such that the datalogger will catch the value
+
+int knockPtr = 0;
+uint16_t knock_buf = 0;
+
+uint16_t knocks[KNOCK_AVG_NUM];
+bool pauseSampling = false; //puases adc sampling
+Adafruit_MCP4725 dac;
+
+Timer<5, micros> s_timer;
+
 void setup() {
-  Serial.begin(2000000);
-  attachInterrupt(RPM_PIN, rpm_ISR, TRIG_EDGE);
-  //run at the end of setup
-  prevMicros = micros();
-  u_timer.every(50000, printRPM);
+  Serial.begin(115200);
+  Serial.println("hello");
+  dac.begin(0x60);
+  pinMode(RETARD_PIN, OUTPUT);
+  pinMode(KNOCK_TRIG_PIN, INPUT);
+  pinMode(PC13, OUTPUT);
+  attachInterrupt(KNOCK_TRIG_PIN, knock_ISR, HIGH);
+  s_timer.every(1, sampleKnock);
+  s_timer.every(KNOCK_DAC_SAMPLE_INTERVAL, outputKnockMag);
+  digitalWrite(PC13, HIGH);
 }
 
 void loop() {
-  u_timer.tick();
+  s_timer.tick();
 }
-bool printRPM(void *)
+
+bool activateTimers(void*)
 {
-  calculateRPM();
-  Serial.println(rpm, 6);
+  s_timer.every(1, sampleKnock);
+  s_timer.every(KNOCK_DAC_SAMPLE_INTERVAL, outputKnockMag);
   return true;
 }
 
-
 /*
-   calculateRPM
-   RPM will be calculated into rpm
-   take average from rpm_pers[]
+   outputKnockMag
+   writes magnitude of knock to DAC
 */
-void calculateRPM()
+bool outputKnockMag(void*)
 {
-  rpm = 0;
-  for (int i = 0; i < RPM_AVG_NUM; i++)
+  float knock_t = 0;
+  for (int i = 0; i < KNOCK_AVG_NUM; i++)
   {
-    rpm += rpm_pers[i];
+    knock_t += knocks[i];
   }
-  rpm = ((60000000.0 / PPR) * RPM_AVG_NUM) / rpm;
+  knock_t = knock_t / KNOCK_AVG_NUM;
+  dac.setVoltage(knock_t, false);
+  Serial.println(knock_t, 6);
+  return true;
+}
+
+bool retardReset(void*)
+{
+  digitalWrite(RETARD_PIN, LOW);   //retard pin low
+  return true;
+}
+
+bool unpauseSampling(void*)
+{
+  //refill buffer with current
+  for (int i = 0; i < KNOCK_AVG_NUM; i++)
+  {
+    knocks[i] = analogRead(KNOCK_PIN);
+  }
+  pauseSampling = false;
+  return true;
 }
 /*
-   ISR for rpm pulse
+   knock edge ISR
+   mag is written to DAC, average array is filled and calculated instantly
+   enable RETARD_PIN
 */
-void rpm_ISR()
+void knock_ISR()
 {
-  t_micros = micros();
-  rpm_pers[getRpmPtr()] = t_micros - prevMicros;
-  if (t_micros < prevMicros)
+  /*
+  pauseSampling = true;
+  digitalWrite(RETARD_PIN, HIGH);   //retard pin
+  //Serial.println("ISR");
+  uint16_t knock_t = analogRead(KNOCK_PIN);
+  //fill all of the knock buffer
+  for (int i = 0; i < KNOCK_AVG_NUM; i++)
   {
-    //overflow every 70 minutes. getRpmPtr updates once more. might cause issues in the future
-    //we'll see
-    rpm_pers[getRpmPtr()] = (0xffffffff - prevMicros) + t_micros;
+    knocks[i] = knock_t;
   }
-  prevMicros = t_micros;
+  outputKnockMag(0);
+  s_timer.in(RETARD_PIN_HOLD, retardReset);  //resets retard pin
+  s_timer.in(KNOCK_DAC_SAMPLE_INTERVAL, unpauseSampling);
+  */
+}
+/*
+   knock sample
+*/
+bool sampleKnock(void *)
+{
+  if (!pauseSampling)
+  {
+    knocks[getKnockPtr()] = analogRead(KNOCK_PIN);
+  }
+  return true;
 }
 /*
    updates current ptr and returns
 */
-int getRpmPtr()
+int getKnockPtr()
 {
-  if (rpmPtr < RPM_AVG_NUM - 1)
+  if (knockPtr < KNOCK_AVG_NUM - 1)
   {
-    rpmPtr++;
+    knockPtr++;
   }
   else
   {
-    rpmPtr = 0;
+    knockPtr = 0;
   }
-  return rpmPtr;
+  return knockPtr;
 }
