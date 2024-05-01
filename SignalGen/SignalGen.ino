@@ -65,7 +65,7 @@ bool RpmSigPer()
   if (1 == random(1, KNOCK_CHANCE))
   {
     //knock
-    dac.setVoltage(constrain((NOISE * (rpm / 100)) + random(0, KNOCK_AMT_MAX), 0, 4095), false);
+    dac.setVoltage(constrain((NOISE * (rpm / 100)) + random(1000, KNOCK_AMT_MAX), 0, 4095), false);
 
   }
   digitalWrite(rpm_pin, HIGH);
