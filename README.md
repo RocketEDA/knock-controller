@@ -14,6 +14,7 @@ During runtime, the retarder signal is what saves the engine. Taking the output 
 V1 design work has been completed, waiting on parts for debugging
 
 goal setting
+
 Phase I: Primitive knock system. 
 - use decoupling capacitor to remove the DC component from the piezo sensor, ambient noise from the engine running
 - sample and hold knock long enough for speeduino to datalog
