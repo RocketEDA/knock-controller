@@ -21,11 +21,11 @@ Adafruit_MCP4725 dac;
 Timer<5, micros> s_timer;
 
 void setup() {
-
   Serial.begin(115200);
   analogReadResolution(12);
   Serial.println("hello");
   dac.begin(0x60);
+  Wire.setClock(3400000);
   pinMode(RETARD_PIN, OUTPUT);
   pinMode(KNOCK_TRIG_PIN, INPUT);
   pinMode(PC13, OUTPUT);
@@ -78,5 +78,9 @@ void knock_ISR()
 */
 void sampleKnock()
 {
-  knock_buf = analogRead(KNOCK_PIN);
+  uint16_t buf_t = analogRead(KNOCK_PIN);
+  if (buf_t > knock_buf)
+  {
+    knock_buf = buf_t;
+  }
 }
